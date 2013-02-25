@@ -1,0 +1,989 @@
+Disassembly Listing for PIC16_Bootloader
+Generated From:
+G:/pics/PIC16_Bootloader/PIC16_Bootloader.X/dist/default/debug/PIC16_Bootloader.X.debug.cof
+08/09/2012 12:57:34
+
+---  G:/pics/PIC16_Bootloader/PIC16_Bootloader.asm  -----------------------------------------------------
+                                                  1:     ; Copyright (c) 2002-2011,  Microchip Technology Inc.
+                                                  2:     ;
+                                                  3:     ; Microchip licenses this software to you solely for use with Microchip
+                                                  4:     ; products.  The software is owned by Microchip and its licensors, and
+                                                  5:     ; is protected under applicable copyright laws.  All rights reserved.
+                                                  6:     ;
+                                                  7:     ; SOFTWARE IS PROVIDED "AS IS."  MICROCHIP EXPRESSLY DISCLAIMS ANY
+                                                  8:     ; WARRANTY OF ANY KIND, WHETHER EXPRESS OR IMPLIED, INCLUDING BUT
+                                                  9:     ; NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS
+                                                  10:    ; FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT.  IN NO EVENT SHALL
+                                                  11:    ; MICROCHIP BE LIABLE FOR ANY INCIDENTAL, SPECIAL, INDIRECT OR
+                                                  12:    ; CONSEQUENTIAL DAMAGES, LOST PROFITS OR LOST DATA, HARM TO YOUR
+                                                  13:    ; EQUIPMENT, COST OF PROCUREMENT OF SUBSTITUTE GOODS, TECHNOLOGY
+                                                  14:    ; OR SERVICES, ANY CLAIMS BY THIRD PARTIES (INCLUDING BUT NOT LIMITED
+                                                  15:    ; TO ANY DEFENSE THEREOF), ANY CLAIMS FOR INDEMNITY OR CONTRIBUTION,
+                                                  16:    ; OR OTHER SIMILAR COSTS.
+                                                  17:    ;
+                                                  18:    ; To the fullest extent allowed by law, Microchip and its licensors
+                                                  19:    ; liability shall not exceed the amount of fees, if any, that you
+                                                  20:    ; have paid directly to Microchip to use this software.
+                                                  21:    ;
+                                                  22:    ; MICROCHIP PROVIDES THIS SOFTWARE CONDITIONALLY UPON YOUR ACCEPTANCE
+                                                  23:    ; OF THESE TERMS.
+                                                  24:    ;
+                                                  25:    ; Author        Date        Comment
+                                                  26:    ; ************************************************************************
+                                                  27:    ; E. Schlunder	08/16/2010  Added support for LWLO bit on 16F1xxx
+                                                  28:    ;			    devices.
+                                                  29:    ; E. Schlunder  07/17/2009  Bringing back support for bootloader at 
+                                                  30:    ;                           address 0 for hardware boot block write
+                                                  31:    ;                           protect.
+                                                  32:    ; E. Schlunder  05/08/2009  Upgrade to support new Serial Bootloader 
+                                                  33:    ;                           features and protocol.
+                                                  34:    ;
+                                                  35:    ; Bootloader for PIC16F by Rodger Richey
+                                                  36:    ; Adapted from PIC18F bootloader developed by Ross Fosler
+                                                  37:    ; 03/18/2002    ... First full implementation
+                                                  38:    ; 03/25/2002    Modified receive & parse engine to vector to autobaud on a checksum 
+                                                  39:    ;               error since a checksum error could likely be a communications problem.
+                                                  40:    ;               Modified the protocol to incorporate the autobaud as part of the 
+                                                  41:    ;               first received <STX>. Doing this improves robustness by allowing
+                                                  42:    ;               re-sync under any condition. Previously it was possible to enter a 
+                                                  43:    ;               state where only a hard reset would allow re-syncing.
+                                                  44:    ; 04/09/2002    Fixed bugs: 1) clear carry before shifting ABTIME in Autobaud
+                                                  45:    ;                           2) Increment address in program memory write
+                                                  46:    ;                           3) Increment address in program memory read
+                                                  47:    ; 06/07/2002    Fixed bug in read, byte counter in code is word counter.  Needed
+                                                  48:    ;               to multiply by 2 to get bytes.
+                                                  49:    ;
+                                                  50:    ; *****************************************************************************
+                                                  51:    
+                                                  52:    ; *****************************************************************************
+                                                  53:    #include "devices.inc"
+                                                  54:    #include "bootconfig.inc"
+                                                  55:    #include "bankswitch.inc"
+                                                  56:    #include "preprocess.inc"
+                                                  57:    ; *****************************************************************************
+                                                  58:    
+                                                  59:    ; *****************************************************************************
+                                                  60:    #define STX             0x0F
+                                                  61:    #define ETX             0x04
+                                                  62:    #define DLE             0x05
+                                                  63:    #define NTX             0xFF
+                                                  64:    ; *****************************************************************************
+                                                  65:    
+                                                  66:    ; *****************************************************************************
+                                                  67:    CRCL                equ 0xA0        ; GPR RAM in bank 1
+                                                  68:    CRCH                equ 0xA1
+                                                  69:    RXDATA              equ 0xA2
+                                                  70:    TXDATA              equ 0xA3
+                                                  71:    
+                                                  72:    ; Framed Packet Format
+                                                  73:    ; <STX>[<COMMAND><ADDRL><ADDRH><ADDRU><0x00><DATALEN><...DATA...>]<CRCL><CRCH><ETX>
+                                                  74:    
+                                                  75:    STARTBUFFER         equ 0x20
+                                                  76:    COMMAND             equ STARTBUFFER     ; receive buffer in bank 0
+                                                  77:    ADDRESS_L           equ STARTBUFFER+1
+                                                  78:    ADDRESS_H           equ STARTBUFFER+2
+                                                  79:    ADDRESS_U           equ STARTBUFFER+3
+                                                  80:    ADDRESS_X           equ STARTBUFFER+4
+                                                  81:    DATA_COUNTL         equ STARTBUFFER+5
+                                                  82:    PACKET_DATA         equ STARTBUFFER+6
+                                                  83:    DATA_COUNTH         equ PACKET_DATA     ; only for certain commands
+                                                  84:    
+                                                  85:    #if BOOTLOADER_ADDRESS == 0
+                                                  86:    #ifndef BSR
+                                                  87:    PCLATH_TEMP	        equ	0x7E		; Interrupt context save/restore temporary memory
+                                                  88:    W_TEMP		        equ	0x7F
+                                                  89:    #endif
+                                                  90:    #endif
+                                                  91:    ; *****************************************************************************
+                                                  92:     
+                                                  93:        errorlevel -302                 ; Do not show any banking warnings
+                                                  94:    ; *****************************************************************************
+                                                  95:    #if BOOTLOADER_ADDRESS != 0
+                                                  96:        ORG     0
+                                                  97:        ; The following GOTO is not strictly necessary, but may startup faster
+                                                  98:        ; if running at slow clock speeds.
+                                                  99:            errorlevel -306             ; Do not show any page boundary warnings
+                                                  100:   ;    nop                                 
+                                                  101:   ;    movlw   high(BootloaderBreakCheck)
+                                                  102:   ;    movwf   PCLATH                  ; Bx
+                                                  103:   ;    goto    BootloaderBreakCheck
+                                                  104:           errorlevel +306             ; Do not show any page boundary warnings
+                                                  105:   
+                                                  106:       ORG     BOOTLOADER_ADDRESS
+                                                  107:   BootloaderStart:
+0E40  300E     MOVLW 0xE                          108:       movlw   high(BootloadMode)
+0E41  008A     MOVWF PCLATH                       109:       movwf   PCLATH                  ; Bx
+0E42  2E49     GOTO 0x649                         110:       goto    BootloadMode
+                                                  111:   
+                                                  112:   ; *****************************************************************************
+                                                  113:   ; Determine if the application is supposed to be started or if we should
+                                                  114:   ; go into bootloader mode.
+                                                  115:   ;
+                                                  116:   ; If RXD is in BREAK state (vs IDLE) when we come out of MCLR reset, 
+                                                  117:   ; immediately enter bootloader mode, even if there exists some application 
+                                                  118:   ; firmware in program memory.
+                                                  119:   BootloaderBreakCheck:
+                                                  120:       DigitalInput                    ; Make sure RX pin is not analog input
+0E43  300E     MOVLW 0xE                          121:       movlw   high(AppVector)
+0E44  008A     MOVWF PCLATH                       122:       movwf   PCLATH                  ; Bx
+                                                  123:       
+                                                  124:   #ifdef INVERT_UART
+                                                  125:       btfss   RXPORT, RXPIN           ; B0 
+                                                  126:       goto    AppVector               ; no BREAK state, attempt to start application
+                                                  127:   
+                                                  128:       btfsc   RXPORT, RXPIN           ; B0 BREAK found, wait for RXD to go IDLE
+                                                  129:       goto    $-1
+                                                  130:   #else
+0E45  1906     BTFSC PORTB, 0x2                   131:       btfsc   RXPORT, RXPIN           ; B0  
+0E46  2E3B     GOTO 0x63B                         132:       goto    AppVector               ; no BREAK state, attempt to start application
+                                                  133:   
+0E47  1D06     BTFSS PORTB, 0x2                   134:       btfss   RXPORT, RXPIN           ; B0 BREAK found, wait for RXD to go IDLE
+0E48  2E47     GOTO 0x647                         135:       goto    $-1
+                                                  136:   #endif
+                                                  137:   #else ; BOOTLOADER_ADDRESS == 0 ****************************************************************
+                                                  138:       ORG     0
+                                                  139:   BootloaderStart:
+                                                  140:       nop                             ; required to allow debug executive startup when running under ICD
+                                                  141:       BXtoB0                          ; Bx -> B0
+                                                  142:       goto    BootloaderBreakCheck
+                                                  143:   
+                                                  144:       ORG     0x0004
+                                                  145:   InterruptVector:
+                                                  146:   #ifndef BSR
+                                                  147:   	movwf	W_TEMP                  ; Bx save W register temporarily
+                                                  148:   	swapf	PCLATH, W				; Bx save PCLATH register
+                                                  149:   	movwf	PCLATH_TEMP				; Bx (SWAPF used to avoid damaging STATUS register)
+                                                  150:   #endif
+                                                  151:       movlw   high(AppIntVector)      ; Bx set PCLATH for making a long jump to the AppIntVector address
+                                                  152:       movwf   PCLATH                  ; Bx
+                                                  153:       goto    AppIntVector            ; Bx jump to remapped application interrupt vector.
+                                                  154:   
+                                                  155:   BootloaderBreakCheck:
+                                                  156:       DigitalInput                    ; Make sure RX pin is not analog input
+                                                  157:       
+                                                  158:   #ifdef INVERT_UART
+                                                  159:       btfsc   RXPORT, RXPIN           ; B0 
+                                                  160:       goto    WaitForRxIdle           ; BREAK detected, startup in Bootloader mode
+                                                  161:   #else
+                                                  162:       btfss   RXPORT, RXPIN           ; B0  
+                                                  163:       goto    WaitForRxIdle           ; BREAK detected, startup in Bootloader mode
+                                                  164:   #endif
+                                                  165:   
+                                                  166:       ; Attempt to startup in Application mode.
+                                                  167:       ; Read instruction at the application reset vector location. 
+                                                  168:       ; If we read 0x3FFF, assume that the application firmware has
+                                                  169:       ; not been programmed yet, so don't try going into application mode.
+                                                  170:       banksel EEADR                   ; Bx -> B2
+                                                  171:       movlw   low(AppVector)          ; Bx load address of application reset vector
+                                                  172:       movwf   EEADR                   ; B2 
+                                                  173:       movlw   high(AppVector)
+                                                  174:       movwf   EEADRH                  ; B2
+                                                  175:       movwf   PCLATH                  ; Bx
+                                                  176:       call    ReadFlashWord           ; Bx -> B0
+                                                  177:   
+                                                  178:       addlw   .1
+                                                  179:       btfss   STATUS, Z               ; Bx if the lower byte != 0xFF, 
+                                                  180:       goto    AppVector               ; Bx run application.
+                                                  181:   
+                                                  182:       movlw   0x3F
+                                                  183:       xorwf   FSR, w                  ; Bx if the lower byte == 0xFF but upper byte != 0x3F,
+                                                  184:       btfss   STATUS, Z               ; Bx run application
+                                                  185:       goto    AppVector
+                                                  186:   
+                                                  187:       movlw   high(BootloadMode)
+                                                  188:       movwf   PCLATH                  ; Bx
+                                                  189:   
+                                                  190:       ; otherwise, assume application firmware is not loaded, 
+                                                  191:       ; fall through to bootloader mode...
+                                                  192:   #ifdef INVERT_UART
+                                                  193:   WaitForRxIdle:
+                                                  194:       btfsc   RXPORT, RXPIN           ; B0 BREAK found, wait for RXD to go IDLE
+                                                  195:       goto    WaitForRxIdle
+                                                  196:   #else
+                                                  197:   WaitForRxIdle:
+                                                  198:       btfss   RXPORT, RXPIN           ; B0 BREAK found, wait for RXD to go IDLE
+                                                  199:       goto    WaitForRxIdle
+                                                  200:   #endif
+                                                  201:   #endif ; end BOOTLOADER_ADDRESS == 0 ******************************************
+                                                  202:   
+                                                  203:   BootloadMode:
+                                                  204:   #ifdef BRG16
+                                                  205:       movlw   b'00110000'             ; 1:8 prescaler - no division required later (but no rounding possible)
+                                                  206:       movwf   T1CON                   ; B0
+                                                  207:   #endif
+                                                  208:   
+                                                  209:   #ifdef BSR
+                                                  210:       banksel RCSTA
+                                                  211:       movlw   b'10010000'             ; Setup UART
+                                                  212:       movwf   RCSTA                   ; B0
+                                                  213:   
+                                                  214:   ;   bcf     TXTRIS, TXPIN           ; B1 Setup TX pin for output
+                                                  215:       movlw   b'00100110'             ; BRGH = 1, TXEN = 1
+                                                  216:       movwf   TXSTA                   ; B1
+                                                  217:       banksel OPTION_REG
+                                                  218:   #else
+0E49  3090     MOVLW 0x90                         219:       movlw   b'10010000'             ; Setup UART
+0E4A  0098     MOVWF RCSTA                        220:       movwf   RCSTA                   ; B0
+                                                  221:   
+0E4B  1683     BSF STATUS, 0x5                    222:       B0toB1                          ; B0 -> B1
+                                                  223:   ;   bcf     TXTRIS, TXPIN           ; B1 Setup TX pin for output
+0E4C  3026     MOVLW 0x26                         224:       movlw   b'00100110'             ; BRGH = 1, TXEN = 1
+0E4D  0098     MOVWF RCSTA                        225:       movwf   TXSTA                   ; B1
+                                                  226:   #endif
+                                                  227:   
+                                                  228:   #ifndef BRG16
+0E4E  0064     CLRWDT                             229:       clrwdt                          ; required to avoid reset when modifying TMR0 prescaler assignment
+0E4F  3003     MOVLW 0x3                          230:       movlw   b'00000011'             ; 1:16 prescaler for Timer 0, used for auto-baud calculation
+0E50  0081     MOVWF TMR0                         231:       movwf   OPTION_REG              ; B1
+                                                  232:   #endif
+                                                  233:   
+0E51  1703     BSF STATUS, 0x6                    234:       B1toB3                          ; B1 -> B3
+                                                  235:   #ifdef INVERT_UART
+                                                  236:       bsf     BAUDCTL, RXDTP          ; B3
+                                                  237:       bsf     BAUDCTL, TXCKP          ; B3
+                                                  238:   #endif
+                                                  239:   #ifdef BRG16
+                                                  240:       bsf     BAUDCTL, BRG16          ; B3
+                                                  241:   #endif
+                                                  242:   
+                                                  243:   #ifdef USE_ALTERNATE_PINS
+                                                  244:   	banksel APFCON0
+                                                  245:   	bsf     APFCON0, TXCKSEL        ; set TX pin to alternate pin
+                                                  246:   	bsf     APFCON0, RXDTSEL        ; set RX pin to alternate pin
+                                                  247:   #endif
+                                                  248:   
+                                                  249:   #if BOOTLOADER_ADDRESS != 0
+                                                  250:       DigitalInput
+                                                  251:   #endif
+                                                  252:   
+                                                  253:   #ifdef USE_MAX_INTOSC
+0E52  1683     BSF STATUS, 0x5                    254:       banksel OSCCON                  ; Bx -> B1
+0E53  1303     BCF STATUS, 0x6
+                                                  255:   
+                                                  256:       #ifdef USE_PLL                  
+                                                  257:       movlw   b'11110000'             ; switch to 8MHz internal oscillator with PLL (32MHz)
+                                                  258:       movwf   OSCCON
+                                                  259:       #else
+0E54  3078     MOVLW 0x78                         260:       movlw   b'01111000'             ; switch to 16MHz internal oscillator without PLL
+0E55  008F     MOVWF TMR1H                        261:       movwf   OSCCON
+                                                  262:       #endif
+                                                  263:   #endif
+                                                  264:   
+                                                  265:   ; *****************************************************************************
+                                                  266:   
+                                                  267:   ; *****************************************************************************
+                                                  268:   DoAutoBaud:
+                                                  269:   ; ___    __________            ________
+                                                  270:   ;    \__/          \__________/
+                                                  271:   ;       |                     |
+                                                  272:   ;       |-------- p ----------|
+                                                  273:   ;
+                                                  274:   ;   p = The number of instructions between the first and last
+                                                  275:   ;           rising edge of the RS232 control sequence 0x0F. Other 
+                                                  276:   ;       possible control sequences are 0x01, 0x03, 0x07, 0x1F, 
+                                                  277:   ;       0x3F, 0x7F.
+                                                  278:   ;
+                                                  279:   ;   SPBRG = (p / 32) - 1    BRGH = 1, BRG16 = 0
+                                                  280:   ;   SPBRG = (p / 8) - 1     BRGH = 1, BRG16 = 1
+                                                  281:   
+                                                  282:   #ifdef BSR
+                                                  283:       banksel RCSTA
+                                                  284:   #else
+0E56  0183     CLRF STATUS                        285:       BXtoB0                          ; Bx -> B0
+                                                  286:   #endif
+0E57  1218     BCF RCSTA, 0x4                     287:       bcf     RCSTA, CREN             ; B0 Stop UART RX, we're going to do autobaud pulse width timing instead
+0E58  081A     MOVF RCREG, W                      288:       movf    RCREG, W                ; B0 Empty the UART receive buffer
+0E59  081A     MOVF RCREG, W                      289:       movf    RCREG, W                ; B0
+                                                  290:   #ifdef BSR
+                                                  291:       banksel TMR1H
+                                                  292:   #endif
+                                                  293:   RetryAutoBaud:
+                                                  294:   #ifdef BRG16
+                                                  295:       clrf    TMR1H                   ; B0 reset timer count value
+                                                  296:       clrf    TMR1L                   ; B0
+                                                  297:       bcf     PIR1, TMR1IF            ; B0
+                                                  298:   #else
+0E5A  1003     BCF STATUS, 0x0                    299:       bcf     STATUS, C               ; Bx do not rotate in anything but 0
+                                                  300:   #endif
+0E5B  26BA     CALL 0x6BA                         301:       call    WaitForRise             ; B0 wait for a start bit to pass by
+                                                  302:   
+                                                  303:   #ifdef BRG16
+                                                  304:       bsf     T1CON, TMR1ON           ; B0 start timer counting for entire D7..D0 data bit period.
+                                                  305:   #else
+0E5C  0181     CLRF TMR0                          306:       clrf    TMR0                    ; B0 restart counting
+                                                  307:   #endif
+0E5D  26BA     CALL 0x6BA                         308:       call    WaitForRise             ; B0 wait for stop bit
+                                                  309:   #ifdef BRG16
+                                                  310:       bcf     T1CON, TMR1ON           ; B0 stop the timer from counting further. 
+                                                  311:       btfsc   PIR1, TMR1IF            ; B0 if TMR1 overflowed, we did not get a good baud capture
+                                                  312:       goto    RetryAutoBaud           ; try again
+                                                  313:   
+                                                  314:       ; save new baud rate generator value
+                                                  315:       movf    TMR1L, w                ; B0 warning: must read TMR0L before TMR0H holds real data
+                                                  316:     #ifdef BSR
+                                                  317:       banksel SPBRG
+                                                  318:     #else
+                                                  319:       B0toB1                          ; B0 -> B1
+                                                  320:     #endif
+                                                  321:       movwf   SPBRG                   ; B1
+                                                  322:     #ifdef BSR
+                                                  323:       banksel TMR1H
+                                                  324:     #else
+                                                  325:       B1toB0                          ; B1 -> B0
+                                                  326:     #endif
+                                                  327:       movf    TMR1H, w                ; B0
+                                                  328:     #ifdef BSR
+                                                  329:       banksel SPBRGH
+                                                  330:     #else
+                                                  331:       B0toB1                          ; B0 -> B1
+                                                  332:     #endif
+                                                  333:       movwf   SPBRGH                  ; B1
+                                                  334:   #else  ; not BRG16
+0E5E  0801     MOVF TMR0, W                       335:       movf    TMR0, w
+0E5F  0084     MOVWF FSR                          336:       movwf   FSR
+0E60  0C04     RRF FSR, W                         337:       rrf     FSR, w                  ; Bx divide timer value by 2 and save in WREG
+0E61  0000     NOP                                338:       nop
+0E62  0000     NOP                                339:       nop
+0E63  1C03     BTFSS STATUS, 0x0                  340:       btfss   STATUS, C               ; Bx do we need to round down?
+0E64  3EFF     ADDLW 0xFF                         341:       addlw   0xFF                    ; yes, round down
+                                                  342:   
+                                                  343:     #ifdef BSR
+                                                  344:       banksel SPBRG
+                                                  345:     #else
+0E65  1683     BSF STATUS, 0x5                    346:       B0toB1                          ; B0 -> B1
+                                                  347:     #endif
+0E66  0099     MOVWF TXREG                        348:       movwf   SPBRG                   ; B1 set new baud rate
+                                                  349:   #endif ; BRG16
+                                                  350:   
+                                                  351:   WaitForHostCommand:                 ; B0/B1
+                                                  352:   #ifdef BSR
+                                                  353:       banksel RCSTA
+                                                  354:   #else
+0E67  0183     CLRF STATUS                        355:       BXtoB0                          ; B1 -> B0
+                                                  356:   #endif
+0E68  1618     BSF RCSTA, 0x4                     357:       bsf     RCSTA, CREN             ; B0 start receiving
+                                                  358:   
+0E69  3020     MOVLW 0x20                         359:       lfsr    COMMAND                 ; Bx Point to the buffer
+0E6A  0084     MOVWF FSR
+0E6B  27D0     CALL 0x7D0                         360:       call    ReadHostByte            ; B0 get start of transmission <STX>
+0E6C  3A0F     XORLW 0xF                          361:       xorlw   STX
+0E6D  1D03     BTFSS STATUS, 0x2                  362:       bnz     DoAutoBaud              ; Bx got something unexpected, perform autobaud
+0E6E  2E56     GOTO 0x656
+                                                  363:   ; *****************************************************************************
+                                                  364:   
+                                                  365:   ; *****************************************************************************
+                                                  366:   ; Read and parse packet data.
+                                                  367:   StartOfLine:
+0E6F  300F     MOVLW 0xF                          368:       movlw   STX                     ; send back start of response
+0E70  27C7     CALL 0x7C7                         369:       call    SendHostByte            ; B0/B1 -> B1
+                                                  370:   
+                                                  371:   ReceiveDataLoop:
+0E71  27D0     CALL 0x7D0                         372:       call    ReadHostByte            ; Bx -> B0 Get the data
+0E72  3A0F     XORLW 0xF                          373:       xorlw   STX                     ; Check for an unexpected STX
+0E73  1903     BTFSC STATUS, 0x2                  374:       bz      StartOfLine             ; unexpected STX: abort packet and start over.
+0E74  2E6F     GOTO 0x66F
+                                                  375:   
+                                                  376:   NoSTX:
+0E75  0800     MOVF INDF, W                       377:       movf    INDF, W                 ; Bx
+0E76  3A04     XORLW 0x4                          378:       xorlw   ETX                     ; Check for a ETX
+0E77  1903     BTFSC STATUS, 0x2                  379:       bz      VerifyPacketCRC         ; Yes, verify CRC
+0E78  2E82     GOTO 0x682
+                                                  380:   
+                                                  381:   NoETX:
+0E79  0800     MOVF INDF, W                       382:       movf    INDF, W                 ; Bx
+0E7A  3A05     XORLW 0x5                          383:       xorlw   DLE                     ; Check for a DLE
+0E7B  1D03     BTFSS STATUS, 0x2                  384:       bnz     AppendDataBuffer
+0E7C  2E7E     GOTO 0x67E
+                                                  385:   
+0E7D  27D0     CALL 0x7D0                         386:       call    ReadHostByte            ; Bx -> B0 DLE received, get the next byte and store it
+                                                  387:       
+                                                  388:   AppendDataBuffer:
+0E7E  0A84     INCF FSR, F                        389:       incf    FSR, f                  ; Bx move to next empty location
+0E7F  1F84     BTFSS FSR, 0x7                     390:       btfss   FSR, 7                  ; Bx have we overflowed the GPR receive buffer?
+0E80  2E71     GOTO 0x671                         391:       goto    ReceiveDataLoop         ; nope, continue receiving data
+0E81  2E56     GOTO 0x656                         392:       goto    DoAutoBaud              ; overflow, baud rate most likely bad, re-attempt autobaud.
+                                                  393:       
+                                                  394:   VerifyPacketCRC:
+0E82  1683     BSF STATUS, 0x5                    395:       B0toB1                          ; B0 -> B1
+0E83  0304     DECF FSR, W                        396:       decf    FSR, w                  ; Bx
+0E84  00A3     MOVWF 0x23                         397:       movwf   TXDATA                  ; B1 save end of packet pointer
+0E85  03A3     DECF 0x23, F                       398:       decf    TXDATA, f               ; Bx
+                                                  399:   
+0E86  3020     MOVLW 0x20                         400:       lfsr    COMMAND                 ; Bx reset pointer to beginning of data
+0E87  0084     MOVWF FSR
+0E88  01A0     CLRF 0x20                          401:       clrf    CRCL                    ; B1 reset CRC accumulator
+0E89  01A1     CLRF 0x21                          402:       clrf    CRCH                    ; B1
+                                                  403:   
+                                                  404:   VerifyPacketCrcLoop:
+0E8A  0800     MOVF INDF, W                       405:       movf    INDF, w                 ; Bx
+0E8B  26C1     CALL 0x6C1                         406:       call    AddCrcB1                ; B1 add new data to the CRC
+                                                  407:   
+0E8C  0A84     INCF FSR, F                        408:       incf    FSR, f                  ; Bx
+0E8D  0804     MOVF FSR, W                        409:       movf    FSR, w                  ; Bx
+0E8E  0223     SUBWF 0x23, W                      410:       subwf   TXDATA, w               ; B1
+0E8F  1D03     BTFSS STATUS, 0x2                  411:       bnz     VerifyPacketCrcLoop     ; we aren't at the end of the received data yet, loop
+0E90  2E8A     GOTO 0x68A
+                                                  412:   
+0E91  0820     MOVF 0x20, W                       413:       movf    CRCL, w                 ; B1
+0E92  0200     SUBWF INDF, W                      414:       subwf   INDF, w                 ; Bx
+0E93  1D03     BTFSS STATUS, 0x2                  415:       bnz     DoAutoBaud              ; invalid CRC, reset baud rate generator to re-sync with host
+0E94  2E56     GOTO 0x656
+                                                  416:   
+0E95  0A84     INCF FSR, F                        417:       incf    FSR, f                  ; Bx
+0E96  0821     MOVF 0x21, W                       418:       movf    CRCH, w                 ; B1
+0E97  0200     SUBWF INDF, W                      419:       subwf   INDF, w                 ; Bx
+0E98  1D03     BTFSS STATUS, 0x2                  420:       bnz     DoAutoBaud              ; Bx invalid CRC, reset baud rate generator to re-sync with host
+0E99  2E56     GOTO 0x656
+                                                  421:   
+                                                  422:   ; ***********************************************
+                                                  423:   ; Pre-setup, common to all commands.
+0E9A  01A0     CLRF 0x20                          424:       clrf    CRCL                    ; B1
+0E9B  01A1     CLRF 0x21                          425:       clrf    CRCH                    ; B1
+                                                  426:   
+0E9C  0183     CLRF STATUS                        427:       BXtoB0                          ; B1 -> B0
+0E9D  0822     MOVF 0x22, W                       428:       movf    ADDRESS_H, W            ; B0 read address pointer from packet data
+0E9E  0084     MOVWF FSR                          429:       movwf   FSR                     ; Bx temporarily save high address byte to FSR
+0E9F  0821     MOVF 0x21, W                       430:       movf    ADDRESS_L, W            ; B0
+0EA0  1283     BCF STATUS, 0x5                    431:       banksel EEADR                   ; Bx -> B2
+0EA1  1703     BSF STATUS, 0x6
+0EA2  008D     MOVWF PIR2                         432:       movwf   EEADR                   ; B2
+0EA3  0804     MOVF FSR, W                        433:       movf    FSR, w                  ; Bx read back high address byte from temporary register
+0EA4  008F     MOVWF TMR1H                        434:       movwf   EEADRH                  ; B2
+                                                  435:   
+0EA5  3026     MOVLW 0x26                         436:       lfsr    PACKET_DATA             ; Bx
+0EA6  0084     MOVWF FSR
+0EA7  0183     CLRF STATUS                        437:       BXtoB0                          ; Bx -> B0
+                                                  438:   
+                                                  439:   ; ***********************************************
+                                                  440:   
+                                                  441:    
+                                                  442:   
+                                                  443:   ; ***********************************************
+                                                  444:   ; Test the command field and sub-command.
+                                                  445:   CheckCommand:
+0EA8  300A     MOVLW 0xA                          446:       movlw   (JUMPTABLE_END - JUMPTABLE_BEGIN)
+0EA9  0220     SUBWF 0x20, W                      447:       subwf   COMMAND, w              ; B0 test for valid command number
+0EAA  1803     BTFSC STATUS, 0x0                  448:       bc      DoAutoBaud              ; Bx invalid command - reset baud generator and re-sync with host
+0EAB  2E56     GOTO 0x656
+                                                  449:   
+0EAC  0820     MOVF 0x20, W                       450:       movf    COMMAND, W              ; B0
+                                                  451:       ; This jump table must exist entirely within one 256 byte block of program memory.
+                                                  452:   #if ($ & 0xFF) > (0xFF - .10)
+                                                  453:       ; Too close to the end of a 256 byte boundary, push address forward to get code
+                                                  454:       ; into the next 256 byte block.
+                                                  455:       messg   "Wasting some code space to ensure jump table is aligned."
+                                                  456:       ORG     $+(0x100 - ($ & 0xFF))
+                                                  457:   #endif
+0EAD  0782     ADDWF PCL, F                       458:       addwf   PCL, F                  ; 0 Bx Jump in command jump table based on COMMAND from host
+                                                  459:   JUMPTABLE_BEGIN:
+0EAE  2EDE     GOTO 0x6DE                         460:       goto    BootloaderInfo          ; 1 B0 0
+0EAF  2EE7     GOTO 0x6E7                         461:       goto    ReadFlash               ; 2 Bx 1
+0EB0  2F09     GOTO 0x709                         462:       goto    VerifyFlash             ; 3 Bx 2
+0EB1  2F23     GOTO 0x723                         463:       goto    EraseFlash              ; 4 Bx 3
+0EB2  2F4F     GOTO 0x74F                         464:       goto    WriteFlash              ; 5 Bx 4
+0EB3  2F83     GOTO 0x783                         465:       goto    ReadEeprom              ; 6 B0 5
+0EB4  2F97     GOTO 0x797                         466:       goto    WriteEeprom             ; 7 Bx 6
+0EB5  2FA9     GOTO 0x7A9                         467:       goto    SendAcknowledge         ; 8 B0 7 - WriteConfig not supported on PIC16F devices
+0EB6  0000     NOP                                468:       nop                             ; 9 B0 8
+0EB7  300E     MOVLW 0xE                          469:       movlw   high(AppVector)         ; 10 B0 9
+                                                  470:   JUMPTABLE_END:
+0EB8  008A     MOVWF PCLATH                       471:       movwf   PCLATH                  ; Bx
+0EB9  2E3B     GOTO 0x63B                         472:       goto    AppVector               ; B0
+                                                  473:   #if (JUMPTABLE_BEGIN & 0xFF) > (JUMPTABLE_END & 0xFF)
+                                                  474:       error "Jump table is not aligned to fit within a single 256 byte address range."
+                                                  475:   #endif
+                                                  476:   
+                                                  477:   WaitForRise:                        ; B0
+0EBA  0064     CLRWDT                             478:       clrwdt
+                                                  479:   
+                                                  480:   WaitForRiseLoop:                    ; B0
+                                                  481:   #ifdef BRG16
+                                                  482:       btfsc   PIR1, TMR1IF            ; B0 if TMR1 overflowed, we did not get a good baud capture
+                                                  483:       return                          ; abort
+                                                  484:   #endif
+                                                  485:   
+0EBB  1906     BTFSC PORTB, 0x2                   486:       btfsc   RXPORT, RXPIN           ; B0 Wait for a falling edge
+0EBC  2EBB     GOTO 0x6BB                         487:       goto    WaitForRiseLoop         ; B0
+                                                  488:   
+                                                  489:   WtSR:
+0EBD  1D06     BTFSS PORTB, 0x2                   490:       btfss   RXPORT, RXPIN           ; B0 Wait for rising edge
+0EBE  2EBD     GOTO 0x6BD                         491:       goto    WtSR                    ; B0
+0EBF  0008     RETURN                             492:       return
+                                                  493:   
+                                                  494:   ; 16-bit CCIT CRC
+                                                  495:   ; Adds WREG byte to the CRC checksum CRCH:CRCL. WREG destroyed on return.
+                                                  496:   AddCrc:                             ; B0/B1 Init: CRCH = HHHH hhhh, CRCL = LLLL llll
+0EC0  1683     BSF STATUS, 0x5                    497:       B0toB1                          ; B0 -> B1
+                                                  498:   AddCrcB1:
+0EC1  0621     XORWF 0x21, W                      499:       xorwf   CRCH, w                 ; B1 Pre:  HHHH hhhh     WREG =      IIII iiii
+0EC2  00A2     MOVWF 0x22                         500:       movwf   RXDATA                  ; B1
+0EC3  0820     MOVF 0x20, W                       501:       movf    CRCL, w                 ; B1 Pre:  LLLL llll     CRCH =      LLLL llll
+0EC4  00A1     MOVWF 0x21                         502:       movwf   CRCH                    ; B1
+0EC5  0822     MOVF 0x22, W                       503:       movf    RXDATA, w               ; B1
+0EC6  00A0     MOVWF 0x20                         504:       movwf   CRCL                    ; B1 Pre:  IIII iiii     CRCL =      IIII iiii
+0EC7  0E20     SWAPF 0x20, W                      505:       swapf   CRCL, w                 ; B1 Pre:  IIII iiii     WREG =      iiii IIII
+0EC8  390F     ANDLW 0xF                          506:       andlw   0x0F                    ; Pre:  iiii IIII     WREG =      0000 IIII
+0EC9  06A0     XORWF 0x20, F                      507:       xorwf   CRCL, f                 ; B1 Pre:  IIII iiii     CRCL =      IIII jjjj
+0ECA  0E20     SWAPF 0x20, W                      508:       swapf   CRCL, w                 ; B1 Pre:  IIII jjjj     WREG =      jjjj IIII
+0ECB  39F0     ANDLW 0xF0                         509:       andlw   0xF0                    ; Pre:  jjjj IIII     WREG =      jjjj 0000
+0ECC  06A1     XORWF 0x21, F                      510:       xorwf   CRCH, f                 ; B1 Pre:  LLLL llll     CRCH =      MMMM llll
+0ECD  0EA0     SWAPF 0x20, F                      511:       swapf   CRCL, f                 ; B1 Pre:  IIII jjjj     WREG =      jjjj IIII
+0ECE  1003     BCF STATUS, 0x0                    512:       bcf     STATUS, C               ; Bx
+0ECF  0D20     RLF 0x20, W                        513:       rlf     CRCL, w                 ; B1 Pre:  jjjj IIII     WREG =      jjjI IIIj
+0ED0  1803     BTFSC STATUS, 0x0                  514:       btfsc   STATUS, C               ; Bx
+0ED1  3E01     ADDLW 0x1                          515:       addlw   .1
+0ED2  06A1     XORWF 0x21, F                      516:       xorwf   CRCH, f                 ; B1 Pre:  MMMM llll     CRCH =      XXXN mmmm
+0ED3  39E0     ANDLW 0xE0                         517:       andlw   b'11100000'             ; Pre:  jjjI IIIj     WREG =      jjj0 0000
+0ED4  06A1     XORWF 0x21, F                      518:       xorwf   CRCH, f                 ; B1 Pre:  jjj0 0000     CRCH =      MMMN mmmm
+0ED5  0EA0     SWAPF 0x20, F                      519:       swapf   CRCL, f                 ; B1 Pre:  IIII jjjj     WREG =      jjjj IIII
+0ED6  06A0     XORWF 0x20, F                      520:       xorwf   CRCL, f                 ; B1 Pre:  MMMN mmmm     CRCL =      JJJI jjjj
+0ED7  0008     RETURN                             521:       return
+                                                  522:   
+                                                  523:   ; ***********************************************
+                                                  524:   ; Commands
+                                                  525:   ; ***********************************************
+                                                  526:    
+                                                  527:   ; Provides information about the Bootloader to the host PC software.
+                                                  528:   BootInfoBlock:
+0ED8  01C0     CLRF 0x40                          529:       db      high(BOOTBLOCKSIZE), low(BOOTBLOCKSIZE)
+0ED9  0501     ANDWF TMR0, W                      530:       db      MINOR_VERSION, MAJOR_VERSION
+                                                  531:   #ifdef FREE
+0EDA  0201     SUBWF TMR0, W                      532:       db      0x02, 0x01              ; family id : command mask (erase flash command enabled)
+                                                  533:   #else
+                                                  534:       db      0x02, 0x00              ; family id : command mask (no erase flash command)
+                                                  535:   #endif
+0EDB  0E40     SWAPF 0x40, W                      536:       db      high(BootloaderStart), low(BootloaderStart)
+0EDC  0000     NOP                                537:       db      0, upper(BootloaderStart)
+                                                  539:   BootInfoBlockEnd:
+                                                  540:   
+                                                  541:   ; In:   <STX>[<0x00>]<CRCL><CRCH><ETX>
+                                                  542:   ; Out:  <STX><BOOTBYTESL><BOOTBYTESH><VERL><VERH><STARTBOOTL><STARTBOOTH><STARTBOOTU><0x00><CRCL><CRCH><ETX>
+                                                  543:   BootloaderInfo:                     ; B0
+0EDE  3006     MOVLW 0x6                          544:       movlw   (BootInfoBlockEnd - BootInfoBlock)
+0EDF  00A5     MOVWF 0x25                         545:       movwf   DATA_COUNTL             ; B0
+0EE0  01A6     CLRF 0x26                          546:       clrf    DATA_COUNTH             ; B0
+                                                  547:   
+0EE1  1283     BCF STATUS, 0x5                    548:       banksel EEADR
+0EE2  1703     BSF STATUS, 0x6
+0EE3  30D8     MOVLW 0xD8                         549:       movlw   low(BootInfoBlock)
+0EE4  008D     MOVWF PIR2                         550:       movwf   EEADR                   ; B2/B3(PIC16F193x)
+0EE5  300E     MOVLW 0xE                          551:       movlw   high(BootInfoBlock)     ; B2/B3(PIC16F193x)
+0EE6  008F     MOVWF TMR1H                        552:       movwf   EEADRH                  ; B2/B3(PIC16F193x)
+                                                  553:   
+                                                  554:       ;; fall through to ReadFlash code -- send Bootloader Information Block from FLASH.
+                                                  555:   
+                                                  556:   ; In:   <STX>[<0x01><ADDRL><ADDRH><ADDRU><0x00><BYTESL><BYTESH>]<CRCL><CRCH><ETX>
+                                                  557:   ; Out:  <STX>[<DATA>...]<CRCL><CRCH><ETX>
+                                                  558:   ReadFlash:                          ; Bx -> B0
+0EE7  26FC     CALL 0x6FC                         559:       call    ReadFlashWord           ; Bx -> B0
+0EE8  27B6     CALL 0x7B6                         560:       call    SendEscapeByte          ; Bx -> B1
+0EE9  26C1     CALL 0x6C1                         561:       call    AddCrcB1                ; B1
+0EEA  0804     MOVF FSR, W                        562:       movf    FSR, w                  ; Bx read most significant bits from tempory memory
+0EEB  27B6     CALL 0x7B6                         563:       call    SendEscapeByte          ; Bx -> B1
+0EEC  26C1     CALL 0x6C1                         564:       call    AddCrcB1                ; B1
+                                                  565:       
+0EED  1283     BCF STATUS, 0x5                    566:       banksel EEADR                   ; Bx -> B2
+0EEE  1703     BSF STATUS, 0x6
+0EEF  0A8D     INCF PIR2, F                       567:       incf    EEADR, f                ; B2
+0EF0  1903     BTFSC STATUS, 0x2                  568:       btfsc   STATUS, Z               ; Bx
+0EF1  0A8F     INCF TMR1H, F                      569:       incf    EEADRH,F                ; B2
+                                                  570:       
+0EF2  0183     CLRF STATUS                        571:       BXtoB0                          ; Bx -> B0
+0EF3  3001     MOVLW 0x1                          572:       movlw   1
+0EF4  02A5     SUBWF 0x25, F                      573:       subwf   DATA_COUNTL, f          ; B0
+0EF5  1C03     BTFSS STATUS, 0x0                  574:       btfss   STATUS, C
+0EF6  03A6     DECF 0x26, F                       575:       decf    DATA_COUNTH, f          ; B0
+                                                  576:   
+0EF7  0826     MOVF 0x26, W                       577:       movf    DATA_COUNTH, w          ; B0 is DATA_COUNTH:DATA_COUNTL == 0?
+0EF8  0425     IORWF 0x25, W                      578:       iorwf   DATA_COUNTL, w          ; B0 
+0EF9  1D03     BTFSS STATUS, 0x2                  579:       bnz     ReadFlash               ; Bx non-zero, keep reading more data
+0EFA  2EE7     GOTO 0x6E7
+0EFB  2FAC     GOTO 0x7AC                         580:       goto    SendChecksum            ; Bx zero, exit read loop and send end of packet
+                                                  581:   
+                                                  582:   ReadFlashWord:                      ; Bx -> B0
+0EFC  1683     BSF STATUS, 0x5                    583:       banksel EECON1                  ; Bx -> B3
+0EFD  1703     BSF STATUS, 0x6
+0EFE  178C     BSF PIR1, 0x7                      584:       bsf     EECON1, EEPGD           ; B3 access program memory instead of eeprom data memory
+0EFF  140C     BSF PIR1, 0x0                      585:       bsf     EECON1, RD              ; B3 initiate read operation
+0F00  0000     NOP                                586:       nop                             ; B3 sounds like this instruction slot might be usable, but NOP is safest
+0F01  0000     NOP                                587:       nop                             ; B3 required NOP during program memory read operation
+0F02  1283     BCF STATUS, 0x5                    588:       banksel EEDATA                  ; Bx -> B2
+0F03  1703     BSF STATUS, 0x6
+0F04  080E     MOVF TMR1L, W                      589:       movf    EEDATH, w               ; B2 read most significant bits of program memory
+0F05  0084     MOVWF FSR                          590:       movwf   FSR                     ; Bx save it temporarily
+0F06  080C     MOVF PIR1, W                       591:       movf    EEDATA, w               ; B2 read least significant byte of program memory
+0F07  0183     CLRF STATUS                        592:       BXtoB0                          ; Bx -> B0
+0F08  0008     RETURN                             593:       return
+                                                  594:   
+                                                  595:   ; In:   <STX>[<0x02><ADDRL><ADDRH><ADDRU><0x00><BLOCKSL><BLOCKSH>]<CRCL><CRCH><ETX>
+                                                  596:   ; Out:  <STX>[<CRCL1><CRCH1>...<CRCLn><CRCHn>]<ETX>
+                                                  597:   VerifyFlash:                        ; Bx
+0F09  26FC     CALL 0x6FC                         598:       call    ReadFlashWord           ; Bx -> B0
+0F0A  26C0     CALL 0x6C0                         599:       call    AddCrc                  ; B1/B0 -> B1
+0F0B  0804     MOVF FSR, W                        600:       movf    FSR, w                  ; Bx read most significant bits from tempory memory
+0F0C  26C1     CALL 0x6C1                         601:       call    AddCrcB1                ; B1
+                                                  602:   
+0F0D  1283     BCF STATUS, 0x5                    603:       banksel EEADR                   ; Bx -> B2
+0F0E  1703     BSF STATUS, 0x6
+0F0F  0A8D     INCF PIR2, F                       604:       incf    EEADR, f                ; B2
+0F10  1903     BTFSC STATUS, 0x2                  605:       btfsc   STATUS, Z               ; Bx
+0F11  0A8F     INCF TMR1H, F                      606:       incf    EEADRH,F                ; B2
+                                                  607:   
+0F12  080D     MOVF PIR2, W                       608:       movf    EEADR, w                ; B2
+0F13  391F     ANDLW 0x1F                         609:       andlw   (ERASE_FLASH_BLOCKSIZE-1)
+0F14  1D03     BTFSS STATUS, 0x2                  610:       bnz     VerifyFlash             ; Bx
+0F15  2F09     GOTO 0x709
+                                                  611:   
+0F16  27B1     CALL 0x7B1                         612:       call    SendCRCWord             ; Bx -> B1
+                                                  613:   
+0F17  0183     CLRF STATUS                        614:       BXtoB0                          ; Bx -> B0
+0F18  3001     MOVLW 0x1                          615:       movlw   1
+0F19  02A5     SUBWF 0x25, F                      616:       subwf   DATA_COUNTL, f          ; B0
+0F1A  1C03     BTFSS STATUS, 0x0                  617:       btfss   STATUS, C               ; Bx
+0F1B  03A6     DECF 0x26, F                       618:       decf    DATA_COUNTH, f          ; B0
+                                                  619:   
+0F1C  0826     MOVF 0x26, W                       620:       movf    DATA_COUNTH, w          ; B0 is DATA_COUNTH:DATA_COUNTL == 0?
+0F1D  0425     IORWF 0x25, W                      621:       iorwf   DATA_COUNTL, w          ; B0
+0F1E  1D03     BTFSS STATUS, 0x2                  622:       bnz     VerifyFlash             ; Bx non-zero, keep reading more data
+0F1F  2F09     GOTO 0x709
+0F20  2FAD     GOTO 0x7AD                         623:       goto    SendETX                 ; Bx zero, exit read loop and send end of packet
+                                                  624:   
+                                                  625:   ; In:   <STX>[<0x03><ADDRL><ADDRH><ADDRU><0x00><PAGESL>]<CRCL><CRCH><ETX>
+                                                  626:   ; Out:  <STX>[<0x03>]<CRCL><CRCH><ETX>
+                                                  627:   #ifdef FREE
+                                                  628:   #ifdef USE_SOFTBOOTWP
+0F21  2E40     GOTO 0x640                         629:       goto    BootloaderStart         ; this code -should- never be executed, but in case of errant 
+0F22  2E40     GOTO 0x640                         630:       goto    BootloaderStart         ; execution or firmware bugs, may protect against accidental erases.
+                                                  631:   #endif
+                                                  632:   EraseFlash:                         ; Bx
+                                                  633:   #ifdef USE_SOFTBOOTWP
+                                                  634:     #define ERASE_ADDRESS_MASK  ( (~(ERASE_FLASH_BLOCKSIZE-1)) & (END_FLASH-1) )
+                                                  635:   
+0F23  1283     BCF STATUS, 0x5                    636:       banksel EEADR                   ; Bx -> B2
+0F24  1703     BSF STATUS, 0x6
+                                                  637:     #if high(ERASE_ADDRESS_MASK) != 0xFF
+0F25  300F     MOVLW 0xF                          638:       movlw   high(ERASE_ADDRESS_MASK)    ; force starting address to land on a FLASH Erase Block boundary
+0F26  058F     ANDWF TMR1H, F                     639:       andwf   EEADRH, f
+                                                  640:     #endif
+                                                  641:     #if low(ERASE_ADDRESS_MASK) != 0xFF
+0F27  30E0     MOVLW 0xE0                         642:       movlw   low(ERASE_ADDRESS_MASK)     ; force starting address to land on a FLASH Erase Block boundary
+0F28  058D     ANDWF PIR2, F                      643:       andwf   EEADR, f
+                                                  644:     #endif
+                                                  645:   
+                                                  646:     #if BOOTLOADER_ADDRESS != 0
+                                                  647:       ; is the address to erase less than the bootloader address?
+0F29  300E     MOVLW 0xE                          648:       movlw   high(BOOTLOADER_ADDRESS)
+0F2A  020F     SUBWF TMR1H, W                     649:       subwf   EEADRH, w
+0F2B  3040     MOVLW 0x40                         650:       movlw   low(BOOTLOADER_ADDRESS)
+0F2C  1903     BTFSC STATUS, 0x2                  651:       btfsc   STATUS, Z
+0F2D  020D     SUBWF PIR2, W                      652:       subwf   EEADR, w
+0F2E  1C03     BTFSS STATUS, 0x0                  653:       btfss   STATUS, C
+0F2F  2F3D     GOTO 0x73D                         654:       goto    EraseAddressOkay    ; erasing memory before the boot block is okay
+                                                  655:     #endif
+                                                  656:   
+                                                  657:       ; is the address to erase greater than or equal to the end of the boot block?
+0F30  3010     MOVLW 0x10                         658:       movlw   high(BOOTLOADER_ADDRESS + BOOTBLOCKSIZE)
+0F31  020F     SUBWF TMR1H, W                     659:       subwf   EEADRH, w
+0F32  3000     MOVLW 0x0                          660:       movlw   low(BOOTLOADER_ADDRESS + BOOTBLOCKSIZE)
+0F33  1903     BTFSC STATUS, 0x2                  661:       btfsc   STATUS, Z
+0F34  020D     SUBWF PIR2, W                      662:       subwf   EEADR, w
+0F35  1803     BTFSC STATUS, 0x0                  663:       btfsc   STATUS, C
+0F36  2F3D     GOTO 0x73D                         664:       goto    EraseAddressOkay    ; erasing memory after the boot block is okay
+                                                  665:   
+0F37  1683     BSF STATUS, 0x5                    666:       banksel EECON1              ; Bx -> B3
+0F38  1703     BSF STATUS, 0x6
+0F39  018C     CLRF PIR1                          667:       clrf    EECON1              ; inhibit writes for this block
+0F3A  2F42     GOTO 0x742                         668:       goto    NextEraseBlock      ; move on to next erase block
+                                                  669:   
+0F3B  2E40     GOTO 0x640                         670:       goto    BootloaderStart     ; this code -should- never be executed, but in case of errant 
+0F3C  2E40     GOTO 0x640                         671:       goto    BootloaderStart     ; execution or firmware bugs, may protect against accidental writes.
+                                                  672:   #endif
+                                                  673:   EraseAddressOkay:
+0F3D  1683     BSF STATUS, 0x5                    674:       banksel EECON1                  ; Bx -> B3
+0F3E  1703     BSF STATUS, 0x6
+0F3F  3094     MOVLW 0x94                         675:       movlw   b'10010100'             ; Bx setup FLASH erase
+0F40  008C     MOVWF PIR1                         676:       movwf   EECON1                  ; B3
+0F41  27DA     CALL 0x7DA                         677:       call    StartWriteB3            ; B3 erase the page
+                                                  678:   
+                                                  679:   NextEraseBlock:
+                                                  680:       ; Decrement address by erase block size
+0F42  1283     BCF STATUS, 0x5                    681:       banksel EEADR                   ; Bx -> B2
+0F43  1703     BSF STATUS, 0x6
+                                                  682:   #if ERASE_FLASH_BLOCKSIZE >= .256
+                                                  683:       movlw   high(ERASE_FLASH_BLOCKSIZE)
+                                                  684:       subwf   EEADRH, F               ; B2
+                                                  685:   #else
+0F44  3020     MOVLW 0x20                         686:       movlw   ERASE_FLASH_BLOCKSIZE
+0F45  028D     SUBWF PIR2, F                      687:       subwf   EEADR, F                ; B2
+0F46  1C03     BTFSS STATUS, 0x0                  688:       btfss   STATUS, C
+0F47  038F     DECF TMR1H, F                      689:       decf    EEADRH, f               ; B2
+                                                  690:   #endif
+                                                  691:   
+0F48  1283     BCF STATUS, 0x5                    692:       banksel DATA_COUNTL             ; Bx -> B1
+0F49  1303     BCF STATUS, 0x6
+0F4A  0BA5     DECFSZ 0x25, F                     693:       decfsz  DATA_COUNTL, F          ; B1
+0F4B  2F23     GOTO 0x723                         694:       goto    EraseFlash    
+0F4C  2FA9     GOTO 0x7A9                         695:       goto    SendAcknowledge         ; All done, send acknowledgement packet
+                                                  696:   #endif
+                                                  697:   
+                                                  698:   #ifdef USE_SOFTBOOTWP
+0F4D  2E40     GOTO 0x640                         699:       goto    BootloaderStart         ; this code -should- never be executed, but in case of errant 
+0F4E  2E40     GOTO 0x640                         700:       goto    BootloaderStart         ; execution or firmware bugs, may protect against accidental writes.
+                                                  701:   #endif
+                                                  702:   
+                                                  703:   ; In:   <STX>[<0x04><ADDRL><ADDRH><ADDRU><0x00><BLOCKSL><DATA>...]<CRCL><CRCH><ETX>
+                                                  704:   ; Out:  <STX>[<0x04>]<CRCL><CRCH><ETX>
+                                                  705:   WriteFlash:                         ; Bx
+                                                  706:   #ifdef USE_SOFTBOOTWP
+                                                  707:     #define WRITE_ADDRESS_MASK  ( (~(WRITE_FLASH_BLOCKSIZE-1)) & (END_FLASH-1) )
+                                                  708:   
+0F4F  1283     BCF STATUS, 0x5                    709:       banksel EEADR                   ; Bx -> B2
+0F50  1703     BSF STATUS, 0x6
+                                                  710:     #if high(WRITE_ADDRESS_MASK) != 0xFF
+0F51  300F     MOVLW 0xF                          711:       movlw   high(WRITE_ADDRESS_MASK)    ; force starting address to land on a FLASH Write Block boundary
+0F52  058F     ANDWF TMR1H, F                     712:       andwf   EEADRH, f
+                                                  713:     #endif
+                                                  714:     #if low(WRITE_ADDRESS_MASK) != 0xFF
+0F53  30FC     MOVLW 0xFC                         715:       movlw   low(WRITE_ADDRESS_MASK)     ; force starting address to land on a FLASH Write Block boundary
+0F54  058D     ANDWF PIR2, F                      716:       andwf   EEADR, f
+                                                  717:     #endif
+                                                  718:   
+                                                  719:     #if BOOTLOADER_ADDRESS != 0
+                                                  720:       ; is the address to write less than the bootloader address?
+0F55  300E     MOVLW 0xE                          721:       movlw   high(BOOTLOADER_ADDRESS)
+0F56  020F     SUBWF TMR1H, W                     722:       subwf   EEADRH, w
+0F57  3040     MOVLW 0x40                         723:       movlw   low(BOOTLOADER_ADDRESS)
+0F58  1903     BTFSC STATUS, 0x2                  724:       btfsc   STATUS, Z
+0F59  020D     SUBWF PIR2, W                      725:       subwf   EEADR, w
+0F5A  1C03     BTFSS STATUS, 0x0                  726:       btfss   STATUS, C
+0F5B  2F69     GOTO 0x769                         727:       goto    WriteAddressOkay    ; writing before the boot block is okay
+                                                  728:     #endif
+                                                  729:   
+                                                  730:       ; is the address to write greater than or equal to the end of the boot block?
+0F5C  3010     MOVLW 0x10                         731:       movlw   high(BOOTLOADER_ADDRESS + BOOTBLOCKSIZE)
+0F5D  020F     SUBWF TMR1H, W                     732:       subwf   EEADRH, w
+0F5E  3000     MOVLW 0x0                          733:       movlw   low(BOOTLOADER_ADDRESS + BOOTBLOCKSIZE)
+0F5F  1903     BTFSC STATUS, 0x2                  734:       btfsc   STATUS, Z
+0F60  020D     SUBWF PIR2, W                      735:       subwf   EEADR, w
+0F61  1803     BTFSC STATUS, 0x0                  736:       btfsc   STATUS, C
+0F62  2F69     GOTO 0x769                         737:       goto    WriteAddressOkay    ; writing after the boot block is okay
+                                                  738:   
+0F63  1683     BSF STATUS, 0x5                    739:       banksel EECON1              ; Bx -> B3
+0F64  1703     BSF STATUS, 0x6
+0F65  018C     CLRF PIR1                          740:       clrf    EECON1              ; inhibit writes for this block
+0F66  2F6D     GOTO 0x76D                         741:       goto    LoadHoldingRegisters; fake the write so we can move on to real writes
+                                                  742:   
+0F67  2E40     GOTO 0x640                         743:       goto    BootloaderStart     ; this code -should- never be executed, but in case of errant 
+0F68  2E40     GOTO 0x640                         744:       goto    BootloaderStart     ; execution or firmware bugs, may protect against accidental writes.
+                                                  745:   #endif
+                                                  746:   WriteAddressOkay:
+0F69  1683     BSF STATUS, 0x5                    747:       banksel EECON1                  ; Bx -> B3
+0F6A  1703     BSF STATUS, 0x6
+0F6B  3084     MOVLW 0x84                         748:       movlw   b'10000100'             ; B3 setup FLASH write
+0F6C  008C     MOVWF PIR1                         749:       movwf   EECON1                  ; B3
+                                                  750:   
+                                                  751:   LoadHoldingRegisters:
+0F6D  1283     BCF STATUS, 0x5                    752:       banksel EEDATA                  ; Bx -> B2
+0F6E  1703     BSF STATUS, 0x6
+0F6F  0800     MOVF INDF, W                       753:       movf    INDF, w                 ; Bx read from buffer memory
+0F70  0A84     INCF FSR, F                        754:       incf    FSR, f                  ; Bx increment buffer memory pointer
+0F71  008C     MOVWF PIR1                         755:       movwf   EEDATA                  ; B2 load the least significant byte holding register
+                                                  756:   
+                                                  757:   #ifdef LWLO
+                                                  758:       bsf     EECON1, LWLO            ; load latches only by default
+                                                  759:       movf    EEADR, w                ; should we initiate write operation?
+                                                  760:       xorlw  (WRITE_FLASH_BLOCKSIZE-1); (only initiate write operation on last word of flash write block)
+                                                  761:       andlw  (WRITE_FLASH_BLOCKSIZE-1)
+                                                  762:       btfsc   STATUS, Z
+                                                  763:       bcf     EECON1, LWLO            ; last word of the flash write block, initiate write operation
+                                                  764:   #endif
+                                                  765:   
+0F72  0800     MOVF INDF, W                       766:       movf    INDF, w                 ; Bx read from buffer memory
+0F73  0A84     INCF FSR, F                        767:       incf    FSR, f                  ; Bx increment buffer memory pointer
+0F74  008E     MOVWF TMR1L                        768:       movwf   EEDATH                  ; B2 load the most significant byte holding register
+0F75  27D9     CALL 0x7D9                         769:       call    StartWrite              ; B3 initiate a write
+                                                  770:   
+0F76  1283     BCF STATUS, 0x5                    771:       banksel EEADR
+0F77  1703     BSF STATUS, 0x6
+0F78  0A8D     INCF PIR2, F                       772:       incf    EEADR, f                ; B2/B3 increment FLASH memory write pointer
+0F79  1903     BTFSC STATUS, 0x2                  773:       btfsc   STATUS, Z               ; Bx
+0F7A  0A8F     INCF TMR1H, F                      774:       incf    EEADRH, f               ; B2/B3
+                                                  775:   
+                                                  776:       ; are we at the end of a write block?
+0F7B  3003     MOVLW 0x3                          777:       movlw   (WRITE_FLASH_BLOCKSIZE-1)
+0F7C  050D     ANDWF PIR2, W                      778:       andwf   EEADR, w                ; B2/B3
+0F7D  1D03     BTFSS STATUS, 0x2                  779:       bnz     LoadHoldingRegisters    ; Bx
+0F7E  2F6D     GOTO 0x76D
+                                                  780:   
+0F7F  0183     CLRF STATUS                        781:       BXtoB0                          ; B2/B3 -> B0
+0F80  0BA5     DECFSZ 0x25, F                     782:       decfsz  DATA_COUNTL, F          ; B0 finished writing block, is there any more data to write?
+0F81  2F4F     GOTO 0x74F                         783:       goto    WriteFlash              ; Bx more data to write, repeat.
+0F82  2FA9     GOTO 0x7A9                         784:       goto    SendAcknowledge         ; B0 all done, send ACK packet
+                                                  785:   
+                                                  786:   ; In:   <STX>[<0x05><ADDRL><ADDRH><0x00><0x00><BYTESL><BYTESH>]<CRCL><CRCH><ETX>
+                                                  787:   ; Out:  <STX>[<DATA>...]<CRCL><CRCH><ETX>
+                                                  788:   ReadEeprom:                         ; Bx
+0F83  1683     BSF STATUS, 0x5                    789:       banksel EECON1                  ; Bx -> B3
+0F84  1703     BSF STATUS, 0x6
+0F85  018C     CLRF PIR1                          790:       clrf    EECON1                  ; B3
+                                                  791:   
+                                                  792:   ReadEepromLoop:
+0F86  140C     BSF PIR1, 0x0                      793:       bsf     EECON1, RD              ; B3 Read the data
+0F87  180C     BTFSC PIR1, 0x0                    794:       btfsc   EECON1, RD
+0F88  2F87     GOTO 0x787                         795:       goto    $-1                     ; wait for read to complete
+0F89  1283     BCF STATUS, 0x5                    796:       banksel EEDATA                  ; Bx -> B2
+0F8A  1703     BSF STATUS, 0x6
+0F8B  080C     MOVF PIR1, W                       797:       movf    EEDATA, w               ; B2
+                                                  798:   
+0F8C  1283     BCF STATUS, 0x5                    799:       banksel EEADR
+0F8D  1703     BSF STATUS, 0x6
+0F8E  0A8D     INCF PIR2, F                       800:       incf    EEADR, f                ; B2 increment EEPROM data pointer
+0F8F  1903     BTFSC STATUS, 0x2                  801:       btfsc   STATUS, Z               ; B2 did we overflow?
+0F90  0A8F     INCF TMR1H, F                      802:       incf    EEADRH, f               ; B2 yes, increment high byte of EEPROM data pointer
+                                                  803:   
+0F91  27B6     CALL 0x7B6                         804:       call    SendEscapeByte          ; Bx -> B1
+0F92  26C1     CALL 0x6C1                         805:       call    AddCrcB1                ; B1
+                                                  806:   
+0F93  0183     CLRF STATUS                        807:       BXtoB0                          ; Bx -> B0
+0F94  0BA5     DECFSZ 0x25, F                     808:       decfsz  DATA_COUNTL, F          ; B0
+0F95  2F83     GOTO 0x783                         809:       goto    ReadEeprom              ; Bx Not finished then repeat
+0F96  2FAC     GOTO 0x7AC                         810:       goto    SendChecksum            ; Bx
+                                                  811:   
+                                                  812:   ; In:   <STX>[<0x06><ADDRL><ADDRH><0x00><0x00><BYTESL><BYTESH><DATA>...]<CRCL><CRCH><ETX>
+                                                  813:   ; Out:  <STX>[<0x06>]<CRCL><CRCH><ETX>
+                                                  814:   WriteEeprom:                        ; Bx
+0F97  0A84     INCF FSR, F                        815:       incf    FSR, f                  ; Bx increment data buffer pointer
+0F98  0800     MOVF INDF, W                       816:       movf    INDF, w                 ; Bx read data from buffer
+0F99  1283     BCF STATUS, 0x5                    817:       banksel EEDATA                  ; Bx -> B2
+0F9A  1703     BSF STATUS, 0x6
+0F9B  008C     MOVWF PIR1                         818:       movwf   EEDATA                  ; B2 load the least significant byte holding register
+0F9C  1683     BSF STATUS, 0x5                    819:       B2toB3                          ; B2 -> B3
+0F9D  3004     MOVLW 0x4                          820:       movlw   b'00000100'             ; Setup for EEPROM data writes
+0F9E  008C     MOVWF PIR1                         821:       movwf   EECON1                  ; B3
+0F9F  27DA     CALL 0x7DA                         822:       call    StartWriteB3            ; B3
+                                                  823:   
+0FA0  188C     BTFSC PIR1, 0x1                    824:       btfsc   EECON1, WR              ; B3 wait for write to complete before moving to next address
+0FA1  2FA0     GOTO 0x7A0                         825:       goto    $-1
+                                                  826:   
+0FA2  1283     BCF STATUS, 0x5                    827:       banksel EEADR
+0FA3  1703     BSF STATUS, 0x6
+0FA4  0A8D     INCF PIR2, F                       828:       incf    EEADR, F                ; B2/B3 Adjust EEDATA pointer
+                                                  829:   
+0FA5  0183     CLRF STATUS                        830:       BXtoB0                          ; B2 -> B0
+0FA6  0BA5     DECFSZ 0x25, F                     831:       decfsz  DATA_COUNTL, f          ; B0
+0FA7  2F97     GOTO 0x797                         832:       goto    WriteEeprom             ; Bx
+0FA8  2FA9     GOTO 0x7A9                         833:       goto    SendAcknowledge         ; B0
+                                                  834:   
+                                                  835:   ; ***********************************************
+                                                  836:   ; Send an acknowledgement packet back
+                                                  837:   ;
+                                                  838:   ; <STX><COMMAND><CRCL><CRCH><ETX>
+                                                  839:   
+                                                  840:   ; Some devices only have config words as FLASH memory. Some devices don't have EEPROM.
+                                                  841:   ; For these devices, we can save code by jumping directly to sending back an
+                                                  842:   ; acknowledgement packet if the PC application erroneously requests them.
+                                                  843:   #ifndef FREE
+                                                  844:   EraseFlash:                         ; only PIC16F88/87 supports explicit FLASH erase commands
+                                                  845:   #endif
+                                                  846:   SendAcknowledge:                    ; B0
+0FA9  0820     MOVF 0x20, W                       847:       movf    COMMAND, w              ; B0
+0FAA  27B6     CALL 0x7B6                         848:       call    SendEscapeByte          ; B0/B1 -> B1 Send only the command byte (acknowledge packet)
+0FAB  26C1     CALL 0x6C1                         849:       call    AddCrcB1                ; B1
+                                                  850:   
+                                                  851:   SendChecksum:                       ; Bx
+0FAC  27B1     CALL 0x7B1                         852:       call    SendCRCWord             ; Bx -> B1
+                                                  853:   
+                                                  854:   SendETX:                            ; Bx -> B1
+0FAD  0183     CLRF STATUS                        855:       BXtoB0                          ; Bx -> B0
+0FAE  3004     MOVLW 0x4                          856:       movlw   ETX                     ; send end of text condition
+0FAF  27C7     CALL 0x7C7                         857:       call    SendHostByte            ; B0/B1 -> B1
+0FB0  2E67     GOTO 0x667                         858:       goto    WaitForHostCommand      ; B0/B1
+                                                  859:   
+                                                  860:   ; *****************************************************************************
+                                                  861:   
+                                                  862:   
+                                                  863:   ; *****************************************************************************
+                                                  864:   SendCRCWord:                        ; Bx -> B1
+0FB1  1683     BSF STATUS, 0x5                    865:       banksel CRCL
+0FB2  1303     BCF STATUS, 0x6
+0FB3  0820     MOVF 0x20, W                       866:       movf    CRCL, w                 ; B1
+0FB4  27B6     CALL 0x7B6                         867:       call    SendEscapeByte          ; Bx -> B1
+0FB5  0821     MOVF 0x21, W                       868:       movf    CRCH, w                 ; B1
+                                                  869:       ;; fall through to SendEscapeByte routine below
+                                                  870:   
+                                                  871:   ; Write a byte to the serial port while escaping control characters with a DLE
+                                                  872:   ; first.
+                                                  873:   SendEscapeByte:                     ; Bx -> B1
+0FB6  1683     BSF STATUS, 0x5                    874:       banksel TXDATA
+0FB7  1303     BCF STATUS, 0x6
+0FB8  00A3     MOVWF 0x23                         875:       movwf   TXDATA                  ; B1 Save the data
+                                                  876:    
+0FB9  3A0F     XORLW 0xF                          877:       xorlw   STX                     ; Check for a STX
+0FBA  1903     BTFSC STATUS, 0x2                  878:       bz      WrDLE                   ; No, continue WrNext
+0FBB  2FC4     GOTO 0x7C4
+                                                  879:   
+0FBC  0823     MOVF 0x23, W                       880:       movf    TXDATA, W               ; B1
+0FBD  3A04     XORLW 0x4                          881:       xorlw   ETX                     ; Check for a ETX
+0FBE  1903     BTFSC STATUS, 0x2                  882:       bz      WrDLE                   ; No, continue WrNext
+0FBF  2FC4     GOTO 0x7C4
+                                                  883:   
+0FC0  0823     MOVF 0x23, W                       884:       movf    TXDATA, W               ; B1
+0FC1  3A05     XORLW 0x5                          885:       xorlw   DLE                     ; Check for a DLE
+0FC2  1D03     BTFSS STATUS, 0x2                  886:       bnz     WrNext                  ; No, continue WrNext
+0FC3  2FC6     GOTO 0x7C6
+                                                  887:   
+                                                  888:   WrDLE:
+0FC4  3005     MOVLW 0x5                          889:       movlw   DLE                     ; Yes, send DLE first
+0FC5  27C7     CALL 0x7C7                         890:       call    SendHostByte            ; B0/B1 -> B1
+                                                  891:   
+                                                  892:   WrNext:
+0FC6  0823     MOVF 0x23, W                       893:       movf    TXDATA, W               ; B1 Then send STX
+                                                  894:   
+                                                  895:   SendHostByte:                       ; B0/B1 -> B1
+0FC7  1283     BCF STATUS, 0x5                    896:       B1toB0                          ; B1 -> B0
+0FC8  0064     CLRWDT                             897:       clrwdt
+0FC9  1E0C     BTFSS PIR1, 0x4                    898:       btfss   PIR1, TXIF              ; B0 Write only if TXREG is ready
+0FCA  2FC9     GOTO 0x7C9                         899:       goto    $-1
+                                                  900:       
+0FCB  1283     BCF STATUS, 0x5                    901:       banksel TXREG
+0FCC  1303     BCF STATUS, 0x6
+0FCD  0099     MOVWF TXREG                        902:       movwf   TXREG                   ; B0 Start sending
+0FCE  1683     BSF STATUS, 0x5                    903:       B0toB1                          ; B0 -> B1
+0FCF  0008     RETURN                             904:       return
+                                                  905:   ; *****************************************************************************
+                                                  906:   
+                                                  907:   ReadHostByte:                       ; Bx -> B0
+0FD0  0183     CLRF STATUS                        908:       BXtoB0                          ; Bx -> B0
+0FD1  0064     CLRWDT                             909:       clrwdt
+0FD2  1E8C     BTFSS PIR1, 0x5                    910:       btfss   PIR1, RCIF              ; B0 Wait for data from RS232
+0FD3  2FD2     GOTO 0x7D2                         911:       goto    $-1   
+                                                  912:   
+                                                  913:   #ifdef BSR
+                                                  914:       banksel RCREG
+                                                  915:   #endif
+0FD4  081A     MOVF RCREG, W                      916:       movf    RCREG, W                ; B0 Save the data
+                                                  917:   #ifdef BSR
+                                                  918:       movlb   .0
+                                                  919:   #endif
+0FD5  0080     MOVWF INDF                         920:       movwf   INDF                    ; Bx
+0FD6  0008     RETURN                             921:       return
+                                                  922:   
+                                                  923:   #ifdef USE_SOFTBOOTWP
+0FD7  2E40     GOTO 0x640                         924:       goto    BootloaderStart         ; this code -should- never be executed, but in case of errant 
+0FD8  2E40     GOTO 0x640                         925:       goto    BootloaderStart         ; execution or firmware bugs, may protect against accidental writes.
+                                                  926:   #endif
+                                                  927:   
+                                                  928:   StartWrite:                         ; B2/B3
+0FD9  1683     BSF STATUS, 0x5                    929:       B2toB3                          ; B2 -> B3
+                                                  930:   StartWriteB3:
+0FDA  0064     CLRWDT                             931:       clrwdt                          ; Bx
+0FDB  3055     MOVLW 0x55                         932:       movlw   0x55                    ; B3 Unlock
+0FDC  008D     MOVWF PIR2                         933:       movwf   EECON2                  ; B3
+0FDD  30AA     MOVLW 0xAA                         934:       movlw   0xAA                    ; B3
+0FDE  008D     MOVWF PIR2                         935:       movwf   EECON2                  ; B3
+0FDF  148C     BSF PIR1, 0x1                      936:       bsf     EECON1, WR              ; B3 Start the write
+0FE0  0000     NOP                                937:       nop                             ; Bx
+0FE1  0000     NOP                                938:       nop                             ; Bx    
+0FE2  0008     RETURN                             939:       return                          ; B3
+                                                  940:   
+2007  0000     NOP                                941:       END

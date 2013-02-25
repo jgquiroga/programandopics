@@ -1,0 +1,4 @@
+_ConfigureOscillator: CODE, 2000 0 1
+_main: CODE, 2004 0 44
+__initialization: CODE, 2001 0 0
+Total: 45

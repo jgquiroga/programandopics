@@ -1,0 +1,129 @@
+MPLINK 4.46, Linker
+Linker Map File - Created Mon Feb 25 02:23:43 2013
+
+                                 Section Info
+                  Section       Type    Address   Location Size(Bytes)
+                ---------  ---------  ---------  ---------  ---------
+                   .org_0       code   0x000000    program   0x000000
+                   .org_1       code   0x000000    program   0x000008
+                   .org_2       code   0x000e40    program   0x00033e
+.config_2007_PIC16_BOOTLOADER.O       code   0x002007    program   0x000002
+.config_2008_PIC16_BOOTLOADER.O       code   0x002008    program   0x000002
+
+
+
+                              Program Memory Usage 
+                               Start         End      
+                           ---------   ---------      
+                            0x000000    0x000003      
+                            0x000e40    0x000fde      
+                            0x002007    0x002008      
+            421 out of 4359 program addresses used, program memory utilization is 9%
+
+
+
+                              Symbols - Sorted by Name
+                     Name    Address   Location    Storage File                     
+                ---------  ---------  ---------  --------- ---------                
+                   AddCrc   0x000ebc    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+                 AddCrcB1   0x000ebd    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+         AppendDataBuffer   0x000e7a    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+            BootInfoBlock   0x000ed4    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+         BootInfoBlockEnd   0x000eda    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+             BootloadMode   0x000e49    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+     BootloaderBreakCheck   0x000e43    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+           BootloaderInfo   0x000eda    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+          BootloaderStart   0x000e40    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+             CheckCommand   0x000ea4    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+               DoAutoBaud   0x000e52    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+         EraseAddressOkay   0x000f39    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+               EraseFlash   0x000f1f    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+          JUMPTABLE_BEGIN   0x000eaa    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+            JUMPTABLE_END   0x000eb4    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+     LoadHoldingRegisters   0x000f69    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+           NextEraseBlock   0x000f3e    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+                    NoETX   0x000e75    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+                    NoSTX   0x000e71    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+               ReadEeprom   0x000f7f    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+           ReadEepromLoop   0x000f82    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+                ReadFlash   0x000ee3    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+            ReadFlashWord   0x000ef8    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+             ReadHostByte   0x000fcc    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+          ReceiveDataLoop   0x000e6d    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+            RetryAutoBaud   0x000e56    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+          SendAcknowledge   0x000fa5    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+              SendCRCWord   0x000fad    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+             SendChecksum   0x000fa8    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+                  SendETX   0x000fa9    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+           SendEscapeByte   0x000fb2    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+             SendHostByte   0x000fc3    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+              StartOfLine   0x000e6b    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+               StartWrite   0x000fd5    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+             StartWriteB3   0x000fd6    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+              VerifyFlash   0x000f05    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+          VerifyPacketCRC   0x000e7e    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+      VerifyPacketCrcLoop   0x000e86    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+       WaitForHostCommand   0x000e63    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+              WaitForRise   0x000eb6    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+          WaitForRiseLoop   0x000eb7    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+                    WrDLE   0x000fc0    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+                   WrNext   0x000fc2    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+         WriteAddressOkay   0x000f65    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+              WriteEeprom   0x000f93    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+               WriteFlash   0x000f4b    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+                     WtSR   0x000eb9    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+
+
+
+                              Symbols - Sorted by Address
+                     Name    Address   Location    Storage File                     
+                ---------  ---------  ---------  --------- ---------                
+          BootloaderStart   0x000e40    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+     BootloaderBreakCheck   0x000e43    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+             BootloadMode   0x000e49    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+               DoAutoBaud   0x000e52    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+            RetryAutoBaud   0x000e56    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+       WaitForHostCommand   0x000e63    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+              StartOfLine   0x000e6b    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+          ReceiveDataLoop   0x000e6d    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+                    NoSTX   0x000e71    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+                    NoETX   0x000e75    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+         AppendDataBuffer   0x000e7a    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+          VerifyPacketCRC   0x000e7e    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+      VerifyPacketCrcLoop   0x000e86    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+             CheckCommand   0x000ea4    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+          JUMPTABLE_BEGIN   0x000eaa    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+            JUMPTABLE_END   0x000eb4    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+              WaitForRise   0x000eb6    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+          WaitForRiseLoop   0x000eb7    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+                     WtSR   0x000eb9    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+                   AddCrc   0x000ebc    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+                 AddCrcB1   0x000ebd    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+            BootInfoBlock   0x000ed4    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+         BootInfoBlockEnd   0x000eda    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+           BootloaderInfo   0x000eda    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+                ReadFlash   0x000ee3    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+            ReadFlashWord   0x000ef8    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+              VerifyFlash   0x000f05    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+               EraseFlash   0x000f1f    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+         EraseAddressOkay   0x000f39    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+           NextEraseBlock   0x000f3e    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+               WriteFlash   0x000f4b    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+         WriteAddressOkay   0x000f65    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+     LoadHoldingRegisters   0x000f69    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+               ReadEeprom   0x000f7f    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+           ReadEepromLoop   0x000f82    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+              WriteEeprom   0x000f93    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+          SendAcknowledge   0x000fa5    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+             SendChecksum   0x000fa8    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+                  SendETX   0x000fa9    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+              SendCRCWord   0x000fad    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+           SendEscapeByte   0x000fb2    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+                    WrDLE   0x000fc0    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+                   WrNext   0x000fc2    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+             SendHostByte   0x000fc3    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+             ReadHostByte   0x000fcc    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+               StartWrite   0x000fd5    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+             StartWriteB3   0x000fd6    program     static D:\pics\MPLABX_Blog\PIC16F88_04_Bootloader_20Mhz\PIC16_Bootloader.asm
+
+

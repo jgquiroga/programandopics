@@ -1,0 +1,153 @@
+Disassembly Listing for PIC16F88_18_TestBootLoader
+Generated From:
+G:/pics/MPLABX/PIC16F88_18_TestBootLoader/dist/default/debug/PIC16F88_18_TestBootLoader.debug.cof
+09/09/2012 17:09:23
+
+---  G:/pics/MPLABX/PIC16F88_18_TestBootLoader/Main.c  --------------------------------------------------
+1:             /************************************************************************
+2:             * Copyright (c) 2009,  Microchip Technology Inc.
+3:             *
+4:             * Microchip licenses this software to you solely for use with Microchip
+5:             * products.  The software is owned by Microchip and its licensors, and
+6:             * is protected under applicable copyright laws.  All rights reserved.
+7:             *
+8:             * SOFTWARE IS PROVIDED "AS IS."  MICROCHIP EXPRESSLY DISCLAIMS ANY
+9:             * WARRANTY OF ANY KIND, WHETHER EXPRESS OR IMPLIED, INCLUDING BUT
+10:            * NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS
+11:            * FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT.  IN NO EVENT SHALL
+12:            * MICROCHIP BE LIABLE FOR ANY INCIDENTAL, SPECIAL, INDIRECT OR
+13:            * CONSEQUENTIAL DAMAGES, LOST PROFITS OR LOST DATA, HARM TO YOUR
+14:            * EQUIPMENT, COST OF PROCUREMENT OF SUBSTITUTE GOODS, TECHNOLOGY
+15:            * OR SERVICES, ANY CLAIMS BY THIRD PARTIES (INCLUDING BUT NOT LIMITED
+16:            * TO ANY DEFENSE THEREOF), ANY CLAIMS FOR INDEMNITY OR CONTRIBUTION,
+17:            * OR OTHER SIMILAR COSTS.
+18:            *
+19:            * To the fullest extent allowed by law, Microchip and its licensors
+20:            * liability shall not exceed the amount of fees, if any, that you
+21:            * have paid directly to Microchip to use this software.
+22:            *
+23:            * MICROCHIP PROVIDES THIS SOFTWARE CONDITIONALLY UPON YOUR ACCEPTANCE
+24:            * OF THESE TERMS.
+25:            *
+26:            * Author        Date        Comment
+27:            *************************************************************************
+28:            * E. Schlunder  2009/05/29  PIC16F example application code for
+29:            *                           serial bootloader using HITECH PIC C.
+30:            ************************************************************************/
+31:            
+32:            #include <xc.h>
+33:            #include <stdio.h>
+34:            
+35:            // Project must reserve access bank memory used by the bootloader
+36:            // interrupt vector routine for saving W and PCLATH temporarily
+37:            // while passing control to application remapped interrupt vector.
+38:            //
+39:            // Enter menu option: Project->Build Options->Project
+40:            // On the Global tab, set RAM ranges to "default,-7E-7F" to reserve 7Eh and 7Fh.
+41:            //unsigned char W_TEMP @ 0x7F;
+42:            //unsigned char PCLATH_TEMP @ 0x7E;
+43:            
+44:            //__CONFIG(MCLRE_ON&CP_OFF& CPD_OFF&LVP_OFF&BOREN_OFF& WDTE_OFF&FOSC_INTOSCIO &
+45:            //            PWRTE_OFF&IESO_OFF & FCMEN_OFF);
+46:            
+47:            // Las configuraciones deben estar separadas en 2 para que no haya problemas
+48:            __CONFIG(MCLRE_ON&CP_OFF& CPD_OFF&LVP_OFF&BOREN_OFF& WDTE_OFF&FOSC_INTOSCIO & PWRTE_OFF);
+49:            __CONFIG(IESO_OFF & FCMEN_OFF);
+50:            
+51:            
+52:            #define _XTAL_FREQ 8000000  // Frecuencia del oscilador 8 Mhz
+53:            
+54:            // Se agregó la siguiente configuración al proyecto para que no
+55:            // genera nada de código entre las posiciones de memoria E400-FFF
+56:            // --ROM=default,-e40-fff
+57:            // Esa línea le indica al compilador xc8 que tome toda la memoria
+58:            // excluyendo lo que está entre menos.
+59:            void main(void)
+60:            {
+61:                // Configuración del clock interno de 8MHz
+62:                //OSCCONbits.IRCF = 0b111;
+63:                //OSCCONbits.SCS = 0b00;
+64:                OSCCON = 0b01110101;
+07CD  3075     MOVLW 0x75
+07CE  1683     BSF STATUS, 0x5
+07CF  1303     BCF STATUS, 0x6
+07D0  008F     MOVWF TMR1H
+65:            
+66:                // Esta línea es importante para que las salidas de A se comporten
+67:                // como salidas digitales. Sino se comportan como analógicas
+68:                
+69:                ADCON0 = 0x00;          // AD MODULE OFF
+07D1  1283     BCF STATUS, 0x5
+07D2  1303     BCF STATUS, 0x6
+07D3  019F     CLRF ADCON0
+70:                ADCON1 = 0x00;          // AD MODULE OFF
+07D4  1683     BSF STATUS, 0x5
+07D5  1303     BCF STATUS, 0x6
+07D6  019F     CLRF ADCON0
+71:                //CMCONbits.CM = 0b111 ;  // COMPARATORS OFF
+72:                
+73:                ANSEL = 0x00;
+07D7  019B     CLRF 0x1B
+74:                CMCON      = 7;
+07D8  3007     MOVLW 0x7
+07D9  009C     MOVWF 0x1C
+75:                
+76:            
+77:                TRISB = 0b11010000;
+07DA  30D0     MOVLW 0xD0
+07DB  0086     MOVWF PORTB
+78:                TRISA = 0b00111111;
+07DC  303F     MOVLW 0x3F
+07DD  0085     MOVWF PORTA
+79:                PORTB = 0xFF;
+07DE  30FF     MOVLW 0xFF
+07DF  1283     BCF STATUS, 0x5
+07E0  1303     BCF STATUS, 0x6
+07E1  0086     MOVWF PORTB
+80:                PORTA = 0b00101010;
+07E2  302A     MOVLW 0x2A
+07E3  0085     MOVWF PORTA
+81:                PORTA = 0xFF;
+07E4  30FF     MOVLW 0xFF
+07E5  0085     MOVWF PORTA
+07E6  2FE7     GOTO 0x7E7
+82:            
+83:                while (1)
+07FD  2FE7     GOTO 0x7E7
+84:                {
+85:                    PORTAbits.RA6 = 1;
+07E7  1283     BCF STATUS, 0x5
+07E8  1303     BCF STATUS, 0x6
+07E9  1705     BSF PORTA, 0x6
+86:                    PORTAbits.RA7 = 1;
+07EA  1785     BSF PORTA, 0x7
+87:                    PORTA ^= 0xFF;
+07EB  30FF     MOVLW 0xFF
+07EC  00F0     MOVWF 0x70
+07ED  0870     MOVF 0x70, W
+07EE  0685     XORWF PORTA, F
+88:                    __delay_ms(500);
+07C8  01F3     CLRF 0x73
+07EF  3006     MOVLW 0x6
+07F0  00F2     MOVWF 0x72
+07F1  3013     MOVLW 0x13
+07F2  00F1     MOVWF 0x71
+07F3  30B1     MOVLW 0xB1
+07F4  00F0     MOVWF 0x70
+07F5  0BF0     DECFSZ 0x70, F
+07F6  2FF5     GOTO 0x7F5
+07F7  0BF1     DECFSZ 0x71, F
+07F8  2FF5     GOTO 0x7F5
+07F9  0BF2     DECFSZ 0x72, F
+07FA  2FF5     GOTO 0x7F5
+07FB  2FFC     GOTO 0x7FC
+07FC  2FE7     GOTO 0x7E7
+89:                    /*PORTAbits.RA0 = 1;
+07C9  01F4     CLRF 0x74
+90:                    PORTAbits.RA1 = 1;
+91:                    PORTAbits.RA2 = 1;
+92:                    PORTAbits.RA3 = 1;
+93:                    PORTAbits.RA4 = 1;*/
+94:                }
+95:            }
+07FE  118A     BCF PCLATH, 0x3

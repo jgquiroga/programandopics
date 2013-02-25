@@ -15,3 +15,10 @@
 # Compiled Asm and Hex
 *.asm
 *.hex
+
+# Carpetas privadas
+private/
+*/private/
+*/private.xml
+*private.xml
+*private.properties
