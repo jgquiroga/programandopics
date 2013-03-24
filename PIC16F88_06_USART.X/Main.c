@@ -30,15 +30,9 @@
  * Vector de interrupciones
  */
 static void interrupt isr(void) {
-    // Si se recibió al mismo tiempo una interrupción
-    // por Serial, setea un flag para que no se lea
-    if(RCIF && !TMR1IF && RCIE) {
+    // Limpia la interrupción de recepción de data
+    if(RCIF && RCIE) {
         RCIF = 0;
-    }
-
-        // Si ocurrió una interrupción por timer 1
-    if(PIR1bits.TMR1IF) {
-        PIR1bits.TMR1IF = 0; // Limpia el valor de la interrupcion por timer
     }
 }
 
