@@ -1,0 +1,13 @@
+_processSSC: CODE, 429 0 73
+__stringtab: STRING, 658 0 6
+_Ticks4Window: STRING, 670 0 2
+_main: CODE, 354 0 75
+_Ticks4Minimum: STRING, 0 0 670
+_Ticks4Maximum: STRING, 0 0 668
+__initialization: CODE, 585 0 27
+_Ticks4Center: STRING, 0 0 666
+_isr: CODE, 19 0 335
+_getch: CODE, 672 0 11
+_moveServo: CODE, 546 0 39
+___wmul: CODE, 502 0 44
+Total: 2616

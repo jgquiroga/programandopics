@@ -37,7 +37,7 @@
         <targetPluginBoard></targetPluginBoard>
         <platformTool>Simulator</platformTool>
         <languageToolchain>MPASMWIN</languageToolchain>
-        <languageToolchainVersion>5.48</languageToolchainVersion>
+        <languageToolchainVersion>5.49</languageToolchainVersion>
         <platform>3</platform>
       </toolsSet>
       <compileType>

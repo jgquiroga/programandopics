@@ -10,9 +10,9 @@ CND_CONF=default
 CND_DISTDIR=dist
 TMPDIR=build/${CND_CONF}/${IMAGE_TYPE}/tmp-packaging
 TMPDIRNAME=tmp-packaging
-OUTPUT_PATH=dist/${CND_CONF}/${IMAGE_TYPE}/PIC16F88_01_Led_Intermitente.${IMAGE_TYPE}.${OUTPUT_SUFFIX}
-OUTPUT_BASENAME=PIC16F88_01_Led_Intermitente.${IMAGE_TYPE}.${OUTPUT_SUFFIX}
-PACKAGE_TOP_DIR=pic16f8801ledintermitente/
+OUTPUT_PATH=dist/${CND_CONF}/${IMAGE_TYPE}/PIC16F88_05_Servo.X.${IMAGE_TYPE}.${OUTPUT_SUFFIX}
+OUTPUT_BASENAME=PIC16F88_05_Servo.X.${IMAGE_TYPE}.${OUTPUT_SUFFIX}
+PACKAGE_TOP_DIR=pic16f8805servo.x/
 
 # Functions
 function checkReturnCode
@@ -57,15 +57,15 @@ mkdir -p ${TMPDIR}
 
 # Copy files and create directories and links
 cd "${TOP}"
-makeDirectory ${TMPDIR}/pic16f8801ledintermitente/bin
+makeDirectory ${TMPDIR}/pic16f8805servo.x/bin
 copyFileToTmpDir "${OUTPUT_PATH}" "${TMPDIR}/${PACKAGE_TOP_DIR}bin/${OUTPUT_BASENAME}" 0755
 
 
 # Generate tar file
 cd "${TOP}"
-rm -f ${CND_DISTDIR}/${CND_CONF}/package/pic16f8801ledintermitente.tar
+rm -f ${CND_DISTDIR}/${CND_CONF}/package/pic16f8805servo.x.tar
 cd ${TMPDIR}
-tar -vcf ../../../../${CND_DISTDIR}/${CND_CONF}/package/pic16f8801ledintermitente.tar *
+tar -vcf ../../../../${CND_DISTDIR}/${CND_CONF}/package/pic16f8805servo.x.tar *
 checkReturnCode
 
 # Cleanup
