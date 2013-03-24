@@ -13,7 +13,6 @@
 *.a
 
 # Compiled Asm and Hex
-*.asm
 *.hex
 
 # Carpetas privadas
