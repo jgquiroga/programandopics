@@ -1,0 +1,13 @@
+__stringtab: STRING, 530 0 6
+__stringdata: STRING, 546 0 15
+_putch: CODE, 586 0 12
+_dpowers: STRING, 536 0 10
+_ConfigureOscillator: CODE, 601 0 1
+_main: CODE, 238 0 109
+__initialization: CODE, 598 0 0
+___lwdiv: CODE, 347 0 79
+_isr: CODE, 495 0 35
+_printf: CODE, 19 0 219
+___lwmod: CODE, 426 0 69
+_ConfigureUsart: CODE, 561 0 25
+Total: 580
