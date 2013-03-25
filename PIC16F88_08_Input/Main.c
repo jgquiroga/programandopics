@@ -63,9 +63,6 @@ void main(void)
                                     // sobre el shadow register
         PORTB = shadowPortB;        // Copia el valor del registro al puerto B
 
-        LED ^= 1;   // Hace un XOR entre el valor actual y 1
-                    // Con esto obtiene el valor contrario.
-
         // Espera hasta que el botón esté levantado unos 10 ms como mínimo
         for(contadorDeRebotes = 0 ; contadorDeRebotes < 10 ; contadorDeRebotes++) {
             __delay_ms(1);
